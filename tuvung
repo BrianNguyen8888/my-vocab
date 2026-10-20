@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VocabMaster - Ứng Dụng Học Từ Vựng Cá Nhân</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons CDN -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    .perspective-1000 { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-2xl shadow-indigo-200 shadow-md">
+          <i class="ph-bold ph-cards"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg text-slate-900 leading-tight">VocabMaster</h1>
+          <p class="text-xs text-slate-500">Hệ thống từ vựng cá nhân</p>
+        </div>
+      </div>
+
+      <!-- Accent Toggle & Audio Controls -->
+      <div class="flex items-center gap-2">
+        <div class="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-semibold">
+          <button id="btnAccentUS" onclick="setAccent('en-US')" class="px-2.5 py-1 rounded-md bg-white text-indigo-600 shadow-sm transition">US 🇺🇸</button>
+          <button id="btnAccentUK" onclick="setAccent('en-GB')" class="px-2.5 py-1 rounded-md text-slate-600 transition">UK 🇬🇧</button>
+        </div>
+        <button onclick="exportData()" title="Xuất dữ liệu dự phòng" class="p-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition">
+          <i class="ph-bold ph-download-simple text-lg"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="bg-white border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 flex gap-2">
+      <button onclick="switchTab('flashcard')" id="tab-flashcard" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-2 transition">
+        <i class="ph-bold ph-browsers"></i> Thẻ Flashcard
+      </button>
+      <button onclick="switchTab('bulk')" id="tab-bulk" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition">
+        <i class="ph-bold ph-file-plus"></i> Nhập nhanh hàng loạt
+      </button>
+      <button onclick="switchTab('list')" id="tab-list" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition">
+        <i class="ph-bold ph-list-dashes"></i> Danh sách từ (<span id="totalBadge">0</span>)
+      </button>
+      <button onclick="switchTab('quiz')" id="tab-quiz" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2 transition">
+        <i class="ph-bold ph-exam"></i> Luyện phản xạ
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
+
+    <!-- 1. TAB: FLASHCARD -->
+    <section id="view-flashcard" class="space-y-6">
+      <div class="flex items-center justify-between text-sm text-slate-500">
+        <div>Thẻ số: <span id="cardIndex" class="font-bold text-slate-800 text-base">0</span> / <span id="cardTotal">0</span></div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs">Phím tắt: [Space] Lật thẻ, [←] [→] Đổi từ</span>
+        </div>
+      </div>
+
+      <!-- Flashcard 3D Scene -->
+      <div class="perspective-1000 w-full max-w-xl mx-auto h-80 sm:h-96 cursor-pointer select-none" onclick="flipCard()">
+        <div id="cardInner" class="transform-style-3d relative w-full h-full duration-500 transition-transform">
+          
+          <!-- Card Front -->
+          <div class="backface-hidden absolute inset-0 bg-white border border-slate-200 rounded-3xl p-8 flex flex-col justify-between shadow-xl shadow-slate-100">
+            <div class="flex justify-between items-start">
+              <span id="frontType" class="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full uppercase tracking-wider">type</span>
+              <button onclick="event.stopPropagation(); toggleMasteredCurrent()" id="btnMasterFront" class="text-slate-300 hover:text-amber-500 text-2xl transition">
+                <i class="ph-fill ph-star"></i>
+              </button>
+            </div>
+
+            <div class="text-center my-auto">
+              <h2 id="frontWord" class="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mb-2">Word</h2>
+              <p id="frontPhonetic" class="text-slate-500 text-lg font-mono">/phonetic/</p>
+            </div>
+
+            <div class="flex items-center justify-center gap-3" onclick="event.stopPropagation()">
+              <button onclick="speakWord(currentCard.word, 1.0)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition">
+                <i class="ph-bold ph-speaker-high text-lg"></i> Nghe chuẩn
+              </button>
+              <button onclick="speakWord(currentCard.word, 0.7)" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium flex items-center gap-1 transition" title="Nghe chậm">
+                <i class="ph-bold ph-tortoise text-lg"></i> 0.7x
+              </button>
+            </div>
+          </div>
+
+          <!-- Card Back -->
+          <div class="backface-hidden rotate-y-180 absolute inset-0 bg-gradient-to-br from-indigo-700 to-indigo-900 text-white rounded-3xl p-8 flex flex-col justify-between shadow-xl">
+            <div class="flex justify-between items-start">
+              <span class="text-xs uppercase font-semibold text-indigo-300 tracking-wider">Ý nghĩa & Ví dụ</span>
+              <span id="backType" class="text-xs px-2.5 py-0.5 bg-white/20 rounded-md">noun</span>
+            </div>
+
+            <div class="space-y-4 my-auto">
+              <div>
+                <p class="text-xs text-indigo-200 font-medium">Nghĩa tiếng Việt:</p>
+                <h3 id="backMeaning" class="text-2xl sm:text-3xl font-bold text-white mt-1">Ý nghĩa của từ</h3>
+              </div>
+              <div class="bg-white/10 rounded-xl p-4 border border-white/15">
+                <div class="flex items-start justify-between gap-2">
+                  <p id="backExample" class="text-sm sm:text-base font-medium italic text-indigo-100">"Example sentence goes here."</p>
+                  <button onclick="event.stopPropagation(); speakSentence(currentCard.example)" class="text-indigo-200 hover:text-white text-lg shrink-0">
+                    <i class="ph-bold ph-speaker-high"></i>
+                  </button>
+                </div>
+                <p id="backExampleVi" class="text-xs text-indigo-300 mt-2">Dịch: Bản dịch ví dụ tiếng Việt</p>
+              </div>
+            </div>
+
+            <div class="text-center text-xs text-indigo-300">
+              Nhấp thẻ để quay lại mặt trước
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center justify-center gap-4 max-w-xl mx-auto">
+        <button onclick="prevCard()" class="w-12 h-12 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-700 text-xl shadow-sm transition">
+          <i class="ph-bold ph-arrow-left"></i>
+        </button>
+        <button onclick="flipCard()" class="px-6 h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center gap-2 shadow-sm transition">
+          <i class="ph-bold ph-arrows-clockwise text-lg"></i> Lật thẻ
+        </button>
+        <button onclick="nextCard()" class="w-12 h-12 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-700 text-xl shadow-sm transition">
+          <i class="ph-bold ph-arrow-right"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. TAB: BULK IMPORT (NHẬP HÀNG LOẠT) -->
+    <section id="view-bulk" class="hidden max-w-4xl mx-auto space-y-6">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Nhập nhanh từ vựng số lượng lớn</h2>
+          <p class="text-xs text-slate-500 mt-1">Dán danh sách từ của bạn vào khung bên dưới. Hệ thống tự động nhận diện theo nhiều cú pháp thông dụng.</p>
+        </div>
+
+        <!-- Presets -->
+        <div class="flex flex-wrap items-center gap-2 pt-1">
+          <span class="text-xs font-semibold text-slate-400">Chọn mẫu thử:</span>
+          <button onclick="loadSamplePreset('simple')" class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition">Đơn giản (word - nghĩa)</button>
+          <button onclick="loadSamplePreset('pipe')" class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition">Đầy đủ (Dấu gạch đứng |)</button>
+          <button onclick="loadSamplePreset('json')" class="text-xs px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition">Mảng JSON</button>
+        </div>
+
+        <!-- Textarea -->
+        <div>
+          <textarea id="bulkInput" oninput="previewBulkImport()" rows="8" placeholder="Dán danh sách từ vựng vào đây... Ví dụ:&#10;meticulous | adj | /məˈtɪk.jə.ləs/ | tỉ mỉ | She is meticulous in her work | Cô ấy rất tỉ mỉ&#10;feasible - khả thi, thực hiện được" class="w-full p-4 border border-slate-200 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+        </div>
+
+        <!-- Options & Action -->
+        <div class="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100">
+          <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+            <input type="checkbox" id="chkOverwrite" class="w-4 h-4 text-indigo-600 rounded">
+            <span>Ghi đè thông tin nếu từ đã tồn tại</span>
+          </label>
+          <button onclick="commitBulkImport()" id="btnSubmitBulk" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl flex items-center gap-2 shadow-sm transition">
+            <i class="ph-bold ph-plus-circle text-lg"></i> Nạp từ vào hệ thống (<span id="bulkValidCount">0</span>)
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Table -->
+      <div id="bulkPreviewContainer" class="hidden bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+          <i class="ph-bold ph-eye"></i> Xem trước dữ liệu bóc tách được
+        </h3>
+        <div class="overflow-x-auto max-h-64 border border-slate-100 rounded-xl">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-500 uppercase sticky top-0">
+              <tr>
+                <th class="p-3">Từ vựng</th>
+                <th class="p-3">Loại</th>
+                <th class="p-3">Phiên âm</th>
+                <th class="p-3">Nghĩa tiếng Việt</th>
+                <th class="p-3">Ví dụ</th>
+              </tr>
+            </thead>
+            <tbody id="bulkPreviewBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. TAB: VOCABULARY MANAGER (DANH SÁCH & THÊM LẺ) -->
+    <section id="view-list" class="hidden space-y-6">
+      <!-- Search & Filters -->
+      <div class="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="relative w-full sm:w-80">
+          <i class="ph-bold ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input type="text" id="searchInput" oninput="renderWordList()" placeholder="Tìm kiếm từ vựng, ý nghĩa..." class="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <select id="filterSelect" onchange="renderWordList()" class="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none bg-white">
+            <option value="all">Tất cả từ</option>
+            <option value="learning">Đang học</option>
+            <option value="mastered">Đã nhớ</option>
+          </select>
+          <button onclick="openAddModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl flex items-center gap-2 transition whitespace-nowrap">
+            <i class="ph-bold ph-plus"></i> Thêm từ lẻ
+          </button>
+        </div>
+      </div>
+
+      <!-- Word Table -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-500 uppercase text-xs font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-4">Từ vựng</th>
+                <th class="p-4">Phiên âm</th>
+                <th class="p-4">Nghĩa tiếng Việt</th>
+                <th class="p-4">Ví dụ</th>
+                <th class="p-4 text-center">Trạng thái</th>
+                <th class="p-4 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="wordListBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+        <div id="emptyState" class="hidden p-12 text-center text-slate-400">
+          <i class="ph-bold ph-folder-open text-4xl mb-2 block"></i>
+          Không tìm thấy từ vựng nào phù hợp.
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. TAB: QUIZ MODE (LUYỆN PHẢN XẠ) -->
+    <section id="view-quiz" class="hidden max-w-xl mx-auto space-y-6">
+      <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6 text-center">
+        <div class="flex justify-between items-center text-xs font-semibold text-slate-400">
+          <span>ÔN LUYỆN TRẮC NGHIỆM</span>
+          <span>Điểm: <span id="quizScore" class="text-indigo-600 font-bold">0</span></span>
+        </div>
+
+        <div>
+          <p class="text-sm text-slate-500">Từ này có nghĩa là gì?</p>
+          <h3 id="quizQuestionWord" class="text-4xl font-extrabold text-slate-900 mt-2 mb-1">Word</h3>
+          <p id="quizQuestionPhonetic" class="text-sm font-mono text-slate-400">/phonetic/</p>
+          <button onclick="speakWord(currentQuizWord.word)" class="mt-3 p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-full text-lg transition">
+            <i class="ph-bold ph-speaker-high"></i>
+          </button>
+        </div>
+
+        <div id="quizOptions" class="grid grid-cols-1 gap-3 pt-2">
+          <!-- Options rendered via JS -->
+        </div>
+
+        <button onclick="nextQuizQuestion()" id="btnNextQuiz" class="hidden w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold text-sm transition">
+          Câu tiếp theo <i class="ph-bold ph-arrow-right ml-1"></i>
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Thêm / Sửa từ vựng lẻ -->
+  <div id="modalWord" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 id="modalTitle" class="text-lg font-bold text-slate-900">Thêm từ mới</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+          <i class="ph-bold ph-x"></i>
+        </button>
+      </div>
+
+      <form id="wordForm" onsubmit="handleWordSubmit(event)" class="space-y-3">
+        <input type="hidden" id="editWordId">
+        
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Từ tiếng Anh *</label>
+          <input type="text" id="modalInputWord" required class="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Loại từ</label>
+            <input type="text" id="modalInputType" placeholder="noun, verb..." class="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Phiên âm</label>
+            <input type="text" id="modalInputPhonetic" placeholder="/.../" class="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Nghĩa tiếng Việt *</label>
+          <input type="text" id="modalInputMeaning" required class="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Câu ví dụ (Tiếng Anh)</label>
+          <textarea id="modalInputExample" rows="2" class="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600">Dịch nghĩa câu ví dụ</label>
+          <input type="text" id="modalInputExampleVi" class="w-full mt-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal()" class="px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">Hủy</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold">Lưu lại</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // Dữ liệu mẫu khởi đầu
+    const DEFAULT_WORDS = [
+      { id: 1, word: "Resilience", type: "noun", phonetic: "/rɪˈzɪl.jəns/", meaning: "khả năng phục hồi, kiên cường", example: "Her mental resilience helped her overcome adversity.", exampleVi: "Sự kiên cường tinh thần giúp cô ấy vượt qua nghịch cảnh.", mastered: false },
+      { id: 2, word: "Meticulous", type: "adj", phonetic: "/məˈtɪk.jə.ləs/", meaning: "tỉ mỉ, cẩn thận từng chi tiết", example: "He is meticulous about keeping his records clean.", exampleVi: "Anh ấy rất tỉ mỉ trong việc giữ gìn hồ sơ sạch đẹp.", mastered: true },
+      { id: 3, word: "Mitigate", type: "verb", phonetic: "/ˈmɪt.ɪ.ɡeɪt/", meaning: "làm giảm bớt, xoa dịu rủi ro", example: "Good drainage can mitigate the risk of flooding.", exampleVi: "Hệ thống thoát nước tốt có thể làm giảm nguy cơ ngập úng.", mastered: false },
+      { id: 4, word: "Feasible", type: "adj", phonetic: "/ˈfiː.zə.bəl/", meaning: "khả thi, có thể thực hiện được", example: "It is simply not feasible to manage without extra budget.", exampleVi: "Đơn giản là không thể khả thi nếu không có thêm ngân sách.", mastered: false }
+    ];
+
+    // Trạng thái ứng dụng
+    let words = JSON.parse(localStorage.getItem("my_vocab_db")) || DEFAULT_WORDS;
+    let currentIndex = 0;
+    let isFlipped = false;
+    let currentVoiceAccent = "en-US";
+    let parsedBulkList = [];
+    let currentQuizWord = null;
+    let quizScore = 0;
+
+    // Khởi động
+    window.addEventListener("DOMContentLoaded", () => {
+      saveData();
+      renderFlashcard();
+      renderWordList();
+      initKeyboard();
+    });
+
+    function saveData() {
+      localStorage.setItem("my_vocab_db", JSON.stringify(words));
+      document.getElementById("totalBadge").innerText = words.length;
+    }
+
+    // --- ACCENT & AUDIO ---
+    function setAccent(lang) {
+      currentVoiceAccent = lang;
+      const btnUS = document.getElementById("btnAccentUS");
+      const btnUK = document.getElementById("btnAccentUK");
+      if (lang === "en-US") {
+        btnUS.className = "px-2.5 py-1 rounded-md bg-white text-indigo-600 shadow-sm transition";
+        btnUK.className = "px-2.5 py-1 rounded-md text-slate-600 transition";
+      } else {
+        btnUK.className = "px-2.5 py-1 rounded-md bg-white text-indigo-600 shadow-sm transition";
+        btnUS.className = "px-2.5 py-1 rounded-md text-slate-600 transition";
+      }
+    }
+
+    function speakWord(text, rate = 1.0) {
+      if (!('speechSynthesis' in window)) {
+        alert("Trình duyệt không hỗ trợ Web Speech Audio");
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = currentVoiceAccent;
+      u.rate = rate;
+      window.speechSynthesis.speak(u);
+    }
+
+    function speakSentence(text) {
+      speakWord(text, 0.9);
+    }
+
+    // --- TABS ---
+    function switchTab(tabId) {
+      ['flashcard', 'bulk', 'list', 'quiz'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.add("hidden");
+        const btn = document.getElementById(`tab-${t}`);
+        btn.classList.remove("border-indigo-600", "text-indigo-600");
+        btn.classList.add("border-transparent", "text-slate-500");
+      });
+      document.getElementById(`view-${tabId}`).classList.remove("hidden");
+      const activeBtn = document.getElementById(`tab-${tabId}`);
+      activeBtn.classList.add("border-indigo-600", "text-indigo-600");
+      activeBtn.classList.remove("border-transparent", "text-slate-500");
+
+      if (tabId === 'quiz') startQuiz();
+      if (tabId === 'flashcard') renderFlashcard();
+    }
+
+    // --- FLASHCARD LOGIC ---
+    let currentCard = words[0] || null;
+
+    function renderFlashcard() {
+      if (words.length === 0) return;
+      if (currentIndex >= words.length) currentIndex = 0;
+      currentCard = words[currentIndex];
+
+      document.getElementById("cardIndex").innerText = currentIndex + 1;
+      document.getElementById("cardTotal").innerText = words.length;
+      document.getElementById("frontWord").innerText = currentCard.word;
+      document.getElementById("frontPhonetic").innerText = currentCard.phonetic || "/--/";
+      document.getElementById("frontType").innerText = currentCard.type || "word";
+      document.getElementById("backType").innerText = currentCard.type || "word";
+      document.getElementById("backMeaning").innerText = currentCard.meaning;
+      document.getElementById("backExample").innerText = `"${currentCard.example || 'No example'}"`;
+      document.getElementById("backExampleVi").innerText = `Dịch: ${currentCard.exampleVi || 'Chưa có bản dịch'}`;
+
+      const star = document.getElementById("btnMasterFront");
+      star.className = currentCard.mastered ? "text-amber-500 text-2xl transition" : "text-slate-300 hover:text-amber-500 text-2xl transition";
+
+      // Reset flip
+      if (isFlipped) flipCard();
+    }
+
+    function flipCard() {
+      isFlipped = !isFlipped;
+      document.getElementById("cardInner").style.transform = isFlipped ? "rotateY(180deg)" : "rotateY(0deg)";
+    }
+
+    function nextCard() {
+      if (words.length <= 1) return;
+      currentIndex = (currentIndex + 1) % words.length;
+      renderFlashcard();
+    }
+
+    function prevCard() {
+      if (words.length <= 1) return;
+      currentIndex = (currentIndex - 1 + words.length) % words.length;
+      renderFlashcard();
+    }
+
+    function toggleMasteredCurrent() {
+      if (!currentCard) return;
+      currentCard.mastered = !currentCard.mastered;
+      saveData();
+      renderFlashcard();
+      renderWordList();
+    }
+
+    function initKeyboard() {
+      window.addEventListener("keydown", (e) => {
+        // Chỉ nhận khi không gõ vào input/textarea
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+        if (e.code === "Space") { e.preventDefault(); flipCard(); }
+        else if (e.code === "ArrowRight") { nextCard(); }
+        else if (e.code === "ArrowLeft") { prevCard(); }
+      });
+    }
+
+    // --- BULK IMPORT LOGIC ---
+    function previewBulkImport() {
+      const raw = document.getElementById("bulkInput").value.trim();
+      const previewContainer = document.getElementById("bulkPreviewContainer");
+      const previewBody = document.getElementById("bulkPreviewBody");
+      parsedBulkList = [];
+
+      if (!raw) {
+        previewContainer.classList.add("hidden");
+        document.getElementById("bulkValidCount").innerText = 0;
+        return;
+      }
+
+      // 1. Thử parse dạng JSON Array
+      if (raw.startsWith("[") && raw.endsWith("]")) {
+        try {
+          const arr = JSON.parse(raw);
+          arr.forEach((item, idx) => {
+            if (item.word && item.meaning) {
+              parsedBulkList.push({
+                id: Date.now() + idx,
+                word: item.word.trim(),
+                type: item.type || "noun",
+                phonetic: item.phonetic || "",
+                meaning: item.meaning.trim(),
+                example: item.example || "",
+                exampleVi: item.exampleVi || "",
+                mastered: false
+              });
+            }
+          });
+        } catch (e) {}
+      }
+
+      // 2. Parse theo dòng thông thường (dấu |, tab Excel, hoặc gạch ngang -)
+      if (parsedBulkList.length === 0) {
+        const lines = raw.split("\n");
+        lines.forEach((line, idx) => {
+          const l = line.trim();
+          if (!l) return;
+
+          let w="", t="noun", p="", m="", ex="", exVi="";
+          if (l.includes("|")) {
+            const parts = l.split("|").map(s => s.trim());
+            w = parts[0] || "";
+            t = parts[1] || "noun";
+            p = parts[2] || "";
+            m = parts[3] || "";
+            ex = parts[4] || "";
+            exVi = parts[5] || "";
+          } else if (l.includes("\t")) {
+            const parts = l.split("\t").map(s => s.trim());
+            w = parts[0] || "";
+            m = parts[1] || "";
+            p = parts[2] || "";
+            ex = parts[3] || "";
+          } else if (l.includes("-")) {
+            const parts = l.split("-").map(s => s.trim());
+            w = parts[0] || "";
+            m = parts.slice(1).join("-").trim();
+          }
+
+          if (w && m) {
+            parsedBulkList.push({
+              id: Date.now() + idx,
+              word: w,
+              type: t,
+              phonetic: p,
+              meaning: m,
+              example: ex,
+              exampleVi: exVi,
+              mastered: false
+            });
+          }
+        });
+      }
+
+      document.getElementById("bulkValidCount").innerText = parsedBulkList.length;
+
+      if (parsedBulkList.length > 0) {
+        previewContainer.classList.remove("hidden");
+        previewBody.innerHTML = parsedBulkList.map(item => `
+          <tr class="hover:bg-slate-50">
+            <td class="p-3 font-semibold text-slate-900">${item.word}</td>
+            <td class="p-3"><span class="px-2 py-0.5 bg-slate-100 rounded text-slate-600">${item.type}</span></td>
+            <td class="p-3 font-mono text-slate-500">${item.phonetic || '--'}</td>
+            <td class="p-3 text-slate-700">${item.meaning}</td>
+            <td class="p-3 italic text-slate-500">${item.example || '--'}</td>
+          </tr>
+        `).join("");
+      } else {
+        previewContainer.classList.add("hidden");
+      }
+    }
+
+    function commitBulkImport() {
+      if (parsedBulkList.length === 0) {
+        alert("Chưa có từ nào hợp lệ để thêm!");
+        return;
+      }
+
+      const overwrite = document.getElementById("chkOverwrite").checked;
+      let added = 0;
+      let updated = 0;
+
+      parsedBulkList.forEach(item => {
+        const existIdx = words.findIndex(w => w.word.toLowerCase() === item.word.toLowerCase());
+        if (existIdx >= 0) {
+          if (overwrite) {
+            words[existIdx] = { ...words[existIdx], ...item };
+            updated++;
+          }
+        } else {
+          words.push(item);
+          added++;
+        }
+      });
+
+      saveData();
+      renderWordList();
+      renderFlashcard();
+      document.getElementById("bulkInput").value = "";
+      previewBulkImport();
+      alert(`Thành công! Đã thêm mới: ${added} từ, Cập nhật: ${updated} từ.`);
+      switchTab('list');
+    }
+
+    function loadSamplePreset(type) {
+      const area = document.getElementById("bulkInput");
+      if (type === 'simple') {
+        area.value = "profound - sâu sắc, uyên thâm\nefficiency - tính hiệu quả, năng suất\ncollaborate - hợp tác, cộng tác";
+      } else if (type === 'pipe') {
+        area.value = "scrutinize | verb | /ˈskruː.tɪ.naɪz/ | xem xét kỹ lưỡng | Customers were urged to scrutinize the contract. | Khách hàng được khuyến khích xem xét kỹ hợp đồng.\ninnovative | adj | /ˈɪn.ə.veɪ.tɪv/ | mang tính đổi mới, sáng tạo | She created an innovative approach to learning. | Cô ấy tạo ra phương pháp học sáng tạo.";
+      } else if (type === 'json') {
+        area.value = JSON.stringify([
+          { "word": "Comprehensive", "type": "adj", "phonetic": "/ˌkɑːm.prəˈhen.sɪv/", "meaning": "toàn diện, bao quát", "example": "A comprehensive study of alloy behavior.", "exampleVi": "Một nghiên cứu toàn diện về đặc tính hợp kim." }
+        ], null, 2);
+      }
+      previewBulkImport();
+    }
+
+    // --- WORD LIST & CRUD ---
+    function renderWordList() {
+      const tbody = document.getElementById("wordListBody");
+      const empty = document.getElementById("emptyState");
+      const keyword = document.getElementById("searchInput").value.toLowerCase().trim();
+      const filter = document.getElementById("filterSelect").value;
+
+      const filtered = words.filter(w => {
+        const matchK = w.word.toLowerCase().includes(keyword) || w.meaning.toLowerCase().includes(keyword);
+        if (filter === "mastered") return matchK && w.mastered;
+        if (filter === "learning") return matchK && !w.mastered;
+        return matchK;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = "";
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      empty.classList.add("hidden");
+      tbody.innerHTML = filtered.map(w => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-4">
+            <div class="flex items-center gap-2">
+              <button onclick="speakWord('${w.word}')" class="text-indigo-600 hover:text-indigo-800 text-base" title="Nghe phát âm">
+                <i class="ph-bold ph-speaker-high"></i>
+              </button>
+              <span class="font-bold text-slate-900">${w.word}</span>
+              <span class="text-[10px] uppercase px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">${w.type || 'w'}</span>
+            </div>
+          </td>
+          <td class="p-4 font-mono text-xs text-slate-500">${w.phonetic || '--'}</td>
+          <td class="p-4 font-medium text-slate-800">${w.meaning}</td>
+          <td class="p-4 text-xs text-slate-500 italic max-w-xs truncate">${w.example || '--'}</td>
+          <td class="p-4 text-center">
+            <button onclick="toggleMastered(${w.id})" class="${w.mastered ? 'text-amber-500' : 'text-slate-300'} hover:text-amber-500 text-xl transition">
+              <i class="ph-fill ph-star"></i>
+            </button>
+          </td>
+          <td class="p-4 text-right whitespace-nowrap">
+            <button onclick="editWord(${w.id})" class="p-1.5 text-slate-500 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition">
+              <i class="ph-bold ph-pencil-simple text-base"></i>
+            </button>
+            <button onclick="deleteWord(${w.id})" class="p-1.5 text-slate-500 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition">
+              <i class="ph-bold ph-trash text-base"></i>
+            </button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function toggleMastered(id) {
+      const idx = words.findIndex(w => w.id === id);
+      if (idx !== -1) {
+        words[idx].mastered = !words[idx].mastered;
+        saveData();
+        renderWordList();
+      }
+    }
+
+    function deleteWord(id) {
+      if (confirm("Bạn có chắc muốn xóa từ này?")) {
+        words = words.filter(w => w.id !== id);
+        saveData();
+        renderWordList();
+        renderFlashcard();
+      }
+    }
+
+    function openAddModal() {
+      document.getElementById("modalTitle").innerText = "Thêm từ mới";
+      document.getElementById("editWordId").value = "";
+      document.getElementById("wordForm").reset();
+      document.getElementById("modalWord").classList.remove("hidden");
+    }
+
+    function editWord(id) {
+      const w = words.find(item => item.id === id);
+      if (!w) return;
+      document.getElementById("modalTitle").innerText = "Chỉnh sửa từ";
+      document.getElementById("editWordId").value = w.id;
+      document.getElementById("modalInputWord").value = w.word;
+      document.getElementById("modalInputType").value = w.type;
+      document.getElementById("modalInputPhonetic").value = w.phonetic;
+      document.getElementById("modalInputMeaning").value = w.meaning;
+      document.getElementById("modalInputExample").value = w.example;
+      document.getElementById("modalInputExampleVi").value = w.exampleVi;
+      document.getElementById("modalWord").classList.remove("hidden");
+    }
+
+    function closeModal() {
+      document.getElementById("modalWord").classList.add("hidden");
+    }
+
+    function handleWordSubmit(e) {
+      e.preventDefault();
+      const id = document.getElementById("editWordId").value;
+      const word = document.getElementById("modalInputWord").value.trim();
+      const type = document.getElementById("modalInputType").value.trim() || "noun";
+      const phonetic = document.getElementById("modalInputPhonetic").value.trim();
+      const meaning = document.getElementById("modalInputMeaning").value.trim();
+      const example = document.getElementById("modalInputExample").value.trim();
+      const exampleVi = document.getElementById("modalInputExampleVi").value.trim();
+
+      if (id) {
+        // Cập nhật
+        const idx = words.findIndex(w => w.id == id);
+        if (idx !== -1) {
+          words[idx] = { ...words[idx], word, type, phonetic, meaning, example, exampleVi };
+        }
+      } else {
+        // Thêm mới
+        words.unshift({
+          id: Date.now(),
+          word, type, phonetic, meaning, example, exampleVi,
+          mastered: false
+        });
+      }
+
+      saveData();
+      renderWordList();
+      renderFlashcard();
+      closeModal();
+    }
+
+    // --- QUIZ LOGIC ---
+    function startQuiz() {
+      if (words.length < 4) {
+        alert("Cần có ít nhất 4 từ vựng trong hệ thống để luyện trắc nghiệm!");
+        switchTab('bulk');
+        return;
+      }
+      nextQuizQuestion();
+    }
+
+    function nextQuizQuestion() {
+      document.getElementById("btnNextQuiz").classList.add("hidden");
+      currentQuizWord = words[Math.floor(Math.random() * words.length)];
+      
+      document.getElementById("quizQuestionWord").innerText = currentQuizWord.word;
+      document.getElementById("quizQuestionPhonetic").innerText = currentQuizWord.phonetic || "/--/";
+      speakWord(currentQuizWord.word);
+
+      // 1 đáp án đúng + 3 đáp án sai ngẫu nhiên
+      const wrongPool = words.filter(w => w.id !== currentQuizWord.id);
+      const shuffledWrongs = wrongPool.sort(() => 0.5 - Math.random()).slice(0, 3);
+      const options = [currentQuizWord, ...shuffledWrongs].sort(() => 0.5 - Math.random());
+
+      const container = document.getElementById("quizOptions");
+      container.innerHTML = options.map(opt => `
+        <button onclick="checkQuizAnswer(this, ${opt.id === currentQuizWord.id})" class="quiz-btn w-full p-4 border border-slate-200 hover:border-indigo-500 rounded-2xl text-left font-medium text-slate-800 hover:bg-indigo-50/50 transition">
+          ${opt.meaning}
+        </button>
+      `).join("");
+    }
+
+    function checkQuizAnswer(btn, isCorrect) {
+      const allBtns = document.querySelectorAll(".quiz-btn");
+      allBtns.forEach(b => b.disabled = true);
+
+      if (isCorrect) {
+        btn.classList.add("bg-emerald-50", "border-emerald-500", "text-emerald-800");
+        quizScore += 10;
+      } else {
+        btn.classList.add("bg-rose-50", "border-rose-500", "text-rose-800");
+        quizScore = Math.max(0, quizScore - 5);
+      }
+      document.getElementById("quizScore").innerText = quizScore;
+      document.getElementById("btnNextQuiz").classList.remove("hidden");
+    }
+
+    // --- EXPORT JSON DỰ PHÒNG ---
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(words, null, 2));
+      const dl = document.createElement('a');
+      dl.setAttribute("href", dataStr);
+      dl.setAttribute("download", `vocab_backup_${new Date().toISOString().slice(0,10)}.json`);
+      dl.click();
+    }
+  </script>
+</body>
+</html>
